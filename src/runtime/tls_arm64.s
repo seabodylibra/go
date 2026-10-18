@@ -21,12 +21,17 @@ TEXT runtime·load_g(SB),NOSPLIT,$0
 #ifdef TLS_GD
 	// General Dynamic TLS model (TLSDESC).
 	// The MOVD below generates: adrp x0; ldr x1; add x0; blr x1
-	// TLSDESC ABI clobbers X0, X1, and LR (X30).
-	// Callers expect save_g/load_g to only clobber R0 and R27,
-	// so we save R1 and LR to scratch registers R10 and R11.
+	// TLSDESC ABI clobbers X0, X1, and LR (X30), and the resolver also
+	// stores X1/X2 to [SP-16, SP) without restoring them. Callers keep
+	// live values in the 16 bytes below their SP (the frame record at
+	// [SP-8], see _cgo_topofstack and asmcgocall), so reserve that space
+	// before the resolver runs. Callers expect save_g/load_g to only
+	// clobber R0 and R27, so we save R1 and LR to R10 and R11.
+	SUB	$16, RSP
 	MOVD	R1, R10
 	MOVD	R30, R11
 	MOVD	runtime·tls_g(SB), R0
+	ADD	$16, RSP
 	MOVD	R10, R1
 	MOVD	R11, R30
 	MOVD	R0, R27
@@ -58,9 +63,12 @@ TEXT runtime·save_g(SB),NOSPLIT,$0
 #ifdef TLS_GD
 	// General Dynamic TLS model (TLSDESC).
 	// Save R1 and LR — callers may have live values in these regs.
+	// See load_g above: the resolver also writes [SP-16, SP).
+	SUB	$16, RSP
 	MOVD	R1, R10
 	MOVD	R30, R11
 	MOVD	runtime·tls_g(SB), R0
+	ADD	$16, RSP
 	MOVD	R10, R1
 	MOVD	R11, R30
 	MOVD	R0, R27
